@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>개념도 작성 도구</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:#f0efe9;height:100dvh;display:flex;flex-direction:column;overflow:hidden;touch-action:none}
+
+/* ── 툴바 ── */
+#toolbar{display:flex;align-items:center;gap:5px;padding:7px 10px;background:#fff;border-bottom:1.5px solid #ddd;flex-shrink:0;flex-wrap:wrap}
+.sep{width:1px;height:22px;background:#e0e0e0;margin:0 1px}
+.lbl{font-size:11px;color:#999;white-space:nowrap}
+button{font-family:inherit;font-size:13px;padding:6px 11px;border:1px solid #ccc;border-radius:7px;background:#fff;cursor:pointer;color:#333;touch-action:manipulation;min-height:34px}
+button:hover,button:active{background:#f0eefc;border-color:#7f77dd}
+button.prim{background:#534AB7;color:#fff;border-color:#534AB7}
+button.prim:active{background:#3C3489}
+button.red{border-color:#f09595;color:#a32d2d}
+button.red:active{background:#fcebeb}
+button.on{background:#EEEDFE;border-color:#534AB7;color:#3C3489;font-weight:500}
+select{font-family:inherit;font-size:13px;padding:5px 6px;border:1px solid #ccc;border-radius:7px;background:#fff;cursor:pointer;min-height:34px}
+.sw{width:26px;height:26px;border-radius:50%;border:2.5px solid transparent;cursor:pointer;flex-shrink:0;touch-action:manipulation}
+.sw.on{border-color:#222;transform:scale(1.12)}
+
+/* ── 기호 키보드 ── */
+#symbar{display:none;align-items:center;gap:4px;padding:5px 10px;background:#f7f6f0;border-bottom:1px solid #ddd;flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
+#symbar.show{display:flex}
+.sym-group{display:flex;gap:3px;flex-shrink:0}
+.sym-group+.sym-group{padding-left:8px;border-left:1px solid #ddd;margin-left:4px}
+.sk{font-size:14px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;touch-action:manipulation;white-space:nowrap;font-family:'Apple SD Gothic Neo','Malgun Gothic',serif;min-height:32px;color:#333}
+.sk:active{background:#EEEDFE;border-color:#534AB7}
+.sg-lbl{font-size:10px;color:#aaa;align-self:center;white-space:nowrap;margin-right:2px}
+
+/* ── 캔버스 ── */
+#wrap{flex:1;overflow:auto;position:relative;-webkit-overflow-scrolling:touch}
+#canvas{position:absolute;top:0;left:0;width:3000px;height:2000px}
+#svg{position:absolute;top:0;left:0;width:3000px;height:2000px;pointer-events:none}
+
+/* ── 노드 ── */
+.node{position:absolute;border-radius:10px;border:2px solid #534AB7;background:#EEEDFE;display:inline-flex;align-items:center;justify-content:center;min-width:80px;touch-action:none}
+.node.sel{outline:3px solid #7f77dd;outline-offset:2px}
+.node input.ntxt{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:14px;font-weight:500;color:#3C3489;background:transparent;border:none;outline:none;text-align:center;padding:10px 12px;min-width:60px;max-width:180px;width:80px;cursor:default;-webkit-user-select:none;user-select:none}
+.node input.ntxt.editable{cursor:text;-webkit-user-select:auto;user-select:auto}
+
+/* ── 연결점 (터치용 크게) ── */
+.dot{position:absolute;width:18px;height:18px;border-radius:50%;background:#534AB7;border:3px solid #fff;cursor:crosshair;opacity:0;transition:opacity .15s;z-index:5;touch-action:none}
+.node:hover .dot,.node.sel .dot{opacity:1}
+.dt{top:-9px;left:50%;transform:translateX(-50%)}
+.db{bottom:-9px;left:50%;transform:translateX(-50%)}
+.dl{left:-9px;top:50%;transform:translateY(-50%)}
+.dr{right:-9px;top:50%;transform:translateY(-50%)}
+
+/* ── 삭제 버튼 (터치용 크게) ── */
+.xb{position:absolute;top:-12px;right:-12px;width:24px;height:24px;border-radius:50%;background:#e24b4a;border:2px solid #fff;color:#fff;font-size:14px;line-height:20px;cursor:pointer;display:none;text-align:center;z-index:10;touch-action:manipulation}
+.node.sel .xb{display:block}
+
+/* ── 엣지 라벨 ── */
+.elb{position:absolute;transform:translate(-50%,-50%);z-index:5;display:flex;align-items:center;gap:4px}
+.elb input{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:12px;color:#3C3489;background:#fff;border:1.5px solid #AFA9EC;border-radius:6px;padding:3px 8px;text-align:center;width:84px;outline:none;cursor:text;min-height:28px;touch-action:manipulation}
+.elb input:focus{border-color:#534AB7;background:#f8f7ff}
+.elb.dash input{border-color:#D85A30;color:#993C1D}
+/* 엣지 삭제 버튼 (항상 보임 — 태블릿용) */
+.elb .edel{width:20px;height:20px;border-radius:50%;background:#e24b4a;border:1.5px solid #fff;color:#fff;font-size:12px;line-height:17px;cursor:pointer;text-align:center;flex-shrink:0;touch-action:manipulation;display:none}
+.elb:hover .edel,.elb:focus-within .edel{display:block}
+
+/* 하단 안내 */
+#guide{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.92);border:1px solid #ddd;border-radius:8px;padding:5px 14px;font-size:11px;color:#aaa;pointer-events:none;white-space:nowrap;text-align:center}
+
+/* 선택된 노드 정보 패널 */
+#nodePanel{display:none;align-items:center;gap:6px;padding:5px 10px;background:#EEEDFE;border-bottom:1px solid #AFA9EC;flex-shrink:0;flex-wrap:wrap}
+#nodePanel.show{display:flex}
+#nodePanel .lbl{color:#534AB7;font-weight:500}
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <span class="lbl">노드</span>
+  <button class="prim" id="btnAdd">+ 추가</button>
+  <div class="sep"></div>
+  <span class="lbl">색상</span>
+  <span class="sw on" data-c="purple" style="background:#EEEDFE;border-color:#534AB7" title="보라"></span>
+  <span class="sw"    data-c="teal"   style="background:#E1F5EE;border-color:#0F6E56" title="초록"></span>
+  <span class="sw"    data-c="amber"  style="background:#FAEEDA;border-color:#854F0B" title="노랑"></span>
+  <span class="sw"    data-c="coral"  style="background:#FAECE7;border-color:#993C1D" title="빨강"></span>
+  <span class="sw"    data-c="gray"   style="background:#F1EFE8;border-color:#888780" title="회색"></span>
+  <div class="sep"></div>
+  <span class="lbl">연결선</span>
+  <select id="selLine"><option value="solid">실선</option><option value="dashed">점선 (교차)</option></select>
+  <div class="sep"></div>
+  <button class="red" id="btnDel">삭제</button>
+  <button class="red" id="btnReset">초기화</button>
+  <div class="sep"></div>
+  <button id="btnSym" title="특수기호 키보드">기호 ⌨</button>
+  <div class="sep"></div>
+  <button class="prim" id="btnSave">저장</button>
+  <button id="btnLoad">불러오기</button>
+  <input type="file" id="fileIn" accept=".json" style="display:none">
+</div>
+
+<!-- 특수기호 키보드 -->
+<div id="symbar">
+  <span class="sg-lbl">첨자</span>
+  <div class="sym-group">
+    <button class="sk" data-s="₀">₀</button><button class="sk" data-s="₁">₁</button><button class="sk" data-s="₂">₂</button><button class="sk" data-s="₃">₃</button><button class="sk" data-s="₄">₄</button><button class="sk" data-s="₅">₅</button><button class="sk" data-s="₆">₆</button><button class="sk" data-s="₇">₇</button><button class="sk" data-s="₈">₈</button><button class="sk" data-s="₉">₉</button>
+    <button class="sk" data-s="⁰">⁰</button><button class="sk" data-s="¹">¹</button><button class="sk" data-s="²">²</button><button class="sk" data-s="³">³</button><button class="sk" data-s="⁴">⁴</button><button class="sk" data-s="⁺">⁺</button><button class="sk" data-s="⁻">⁻</button>
+  </div>
+  <div class="sym-group">
+    <span class="sg-lbl">화학식</span>
+    <button class="sk" data-s="→">→</button><button class="sk" data-s="⇌">⇌</button><button class="sk" data-s="⁺">⁺</button><button class="sk" data-s="⁻">⁻</button><button class="sk" data-s="δ+">δ+</button><button class="sk" data-s="δ−">δ−</button><button class="sk" data-s="°C">°C</button>
+  </div>
+  <div class="sym-group">
+    <span class="sg-lbl">원소</span>
+    <button class="sk" data-s="H₂O">H₂O</button><button class="sk" data-s="CO₂">CO₂</button><button class="sk" data-s="NH₃">NH₃</button><button class="sk" data-s="CH₄">CH₄</button><button class="sk" data-s="NaCl">NaCl</button><button class="sk" data-s="Na⁺">Na⁺</button><button class="sk" data-s="Cl⁻">Cl⁻</button>
+  </div>
+  <div class="sym-group">
+    <span class="sg-lbl">수식</span>
+    <button class="sk" data-s="×10²³">×10²³</button><button class="sk" data-s="6.02×10²³">6.02×10²³</button><button class="sk" data-s="∠">∠</button><button class="sk" data-s="≒">≒</button><button class="sk" data-s="∝">∝</button>
+  </div>
+  <div class="sym-group">
+    <span class="sg-lbl">기타</span>
+    <button class="sk" data-s="↑">↑</button><button class="sk" data-s="↓">↓</button><button class="sk" data-s="↔">↔</button><button class="sk" data-s="∴">∴</button><button class="sk" data-s="∵">∵</button>
+  </div>
+</div>
+
+<!-- 선택 노드 패널 -->
+<div id="nodePanel">
+  <span class="lbl">선택된 노드:</span>
+  <span id="panelName" style="font-size:13px;color:#3C3489;font-weight:500"></span>
+  <button id="panelEdit" style="font-size:12px;padding:4px 8px">✏️ 편집</button>
+  <button id="panelDel" class="red" style="font-size:12px;padding:4px 8px">🗑 삭제</button>
+</div>
+
+<div id="wrap">
+  <div id="canvas">
+    <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="mp" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#534AB7" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+        <marker id="mt" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#0F6E56" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+        <marker id="ma" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#854F0B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+        <marker id="mc" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#993C1D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+        <marker id="mg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#888780" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+        <marker id="mo" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#D85A30" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      </defs>
+      <g id="eg"></g>
+      <path id="tpath" fill="none" stroke="#aaa" stroke-width="2" stroke-dasharray="6 3" d="" display="none"/>
+    </svg>
+  </div>
+  <div id="guide">
+    PC: 노드 클릭→선택, 재클릭→편집, 점 드래그→연결 &nbsp;|&nbsp; 태블릿: 탭→선택, 위 패널 편집버튼→텍스트 입력, 점 드래그→연결, 연결어 옆 ×→연결선 삭제
+  </div>
+</div>
+
+<script>
+const CV=document.getElementById('canvas');
+const WR=document.getElementById('wrap');
+const EG=document.getElementById('eg');
+const TP=document.getElementById('tpath');
+const symBar=document.getElementById('symbar');
+const nodePanel=document.getElementById('nodePanel');
+const panelName=document.getElementById('panelName');
+
+const PAL={
+  purple:{bg:'#EEEDFE',st:'#534AB7',tx:'#3C3489',mk:'mp'},
+  teal:  {bg:'#E1F5EE',st:'#0F6E56',tx:'#085041',mk:'mt'},
+  amber: {bg:'#FAEEDA',st:'#854F0B',tx:'#633806',mk:'ma'},
+  coral: {bg:'#FAECE7',st:'#993C1D',tx:'#712B13',mk:'mc'},
+  gray:  {bg:'#F1EFE8',st:'#888780',tx:'#444441',mk:'mg'},
+};
+
+let nodes={}, edges=[], nc=0, ec=0;
+let selId=null, curCol='purple', curLine='solid';
+let activeInp=null; // 현재 편집 중인 input
+
+// 드래그/터치 상태
+let dragState=null;   // {id, ox, oy, moved}
+let connState=null;   // {fromId}
+
+const isTouch=()=>'ontouchstart' in window;
+
+// ── 좌표 ──────────────────────────────────────────────────────
+function cvXY(e){
+  const r=CV.getBoundingClientRect();
+  const src=e.touches?e.touches[0]:e;
+  return {x:src.clientX-r.left, y:src.clientY-r.top};
+}
+function nW(id){return nodes[id].el.offsetWidth;}
+function nH(id){return nodes[id].el.offsetHeight;}
+function nCX(id){return nodes[id].x+nW(id)/2;}
+function nCY(id){return nodes[id].y+nH(id)/2;}
+
+function autoW(inp){
+  const tmp=document.createElement('span');
+  tmp.style.cssText='position:absolute;visibility:hidden;font:500 14px "Apple SD Gothic Neo","Malgun Gothic",sans-serif;white-space:pre;pointer-events:none';
+  tmp.textContent=inp.value||inp.placeholder||'개념어';
+  document.body.appendChild(tmp);
+  const w=Math.max(60,Math.min(200,tmp.offsetWidth+28));
+  document.body.removeChild(tmp);
+  inp.style.width=w+'px';
+}
+
+// ── 기호 키보드 ───────────────────────────────────────────────
+document.getElementById('btnSym').addEventListener('click',()=>{
+  symBar.classList.toggle('show');
+  document.getElementById('btnSym').classList.toggle('on', symBar.classList.contains('show'));
+});
+
+document.querySelectorAll('.sk').forEach(btn=>{
+  btn.addEventListener('click',e=>{
+    e.preventDefault();
+    const sym=btn.dataset.s;
+    if(!activeInp) return;
+    const inp=activeInp;
+    const s=inp.selectionStart, en=inp.selectionEnd;
+    const v=inp.value;
+    inp.value=v.slice(0,s)+sym+v.slice(en);
+    inp.selectionStart=inp.selectionEnd=s+sym.length;
+    inp.dispatchEvent(new Event('input'));
+    inp.focus();
+  });
+  // 터치: 포커스 뺏기지 않게
+  btn.addEventListener('touchstart',e=>e.preventDefault(),{passive:false});
+  btn.addEventListener('touchend',e=>{
+    e.preventDefault();
+    const sym=btn.dataset.s;
+    if(!activeInp) return;
+    const inp=activeInp;
+    const s=inp.selectionStart||inp.value.length, en=inp.selectionEnd||inp.value.length;
+    const v=inp.value;
+    inp.value=v.slice(0,s)+sym+v.slice(en);
+    inp.selectionStart=inp.selectionEnd=s+sym.length;
+    inp.dispatchEvent(new Event('input'));
+  });
+});
+
+// ── 노드 생성 ─────────────────────────────────────────────────
+function addNode(x,y,text,color){
+  const id='n'+(++nc);
+  const p=PAL[color]||PAL.purple;
+
+  const el=document.createElement('div');
+  el.className='node'; el.id=id;
+  el.style.cssText=`left:${x}px;top:${y}px;background:${p.bg};border-color:${p.st}`;
+
+  const inp=document.createElement('input');
+  inp.className='ntxt'; inp.type='text';
+  inp.value=text||''; inp.placeholder='개념어';
+  inp.style.color=p.tx; inp.readOnly=true;
+
+  function onInpInput(){autoW(inp);redrawEdges();panelName.textContent=inp.value||'(빈 노드)';}
+  inp.addEventListener('input',onInpInput);
+  inp.addEventListener('focus',()=>{ activeInp=inp; });
+  inp.addEventListener('blur',()=>{
+    inp.readOnly=true; inp.classList.remove('editable');
+    autoW(inp); redrawEdges();
+    if(activeInp===inp) activeInp=null;
+  });
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key==='Escape')inp.blur();});
+  inp.addEventListener('mousedown',e=>{ if(inp.readOnly) e.preventDefault(); });
+
+  // 연결점 4개
+  ['dt','db','dl','dr'].forEach(cls=>{
+    const d=document.createElement('div');
+    d.className='dot '+cls;
+
+    function startConn(e){
+      e.stopPropagation(); e.preventDefault();
+      connState={fromId:id};
+      TP.setAttribute('d',`M${nCX(id)} ${nCY(id)} L${nCX(id)} ${nCY(id)}`);
+      TP.setAttribute('display','');
+    }
+    d.addEventListener('mousedown',startConn);
+    d.addEventListener('touchstart',startConn,{passive:false});
+    el.appendChild(d);
+  });
+
+  // 삭제 버튼
+  const xb=document.createElement('div');
+  xb.className='xb'; xb.textContent='×';
+  xb.addEventListener('click',e=>{e.stopPropagation();removeNode(id);});
+  xb.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();removeNode(id);});
+  el.appendChild(xb);
+
+  el.appendChild(inp);
+  CV.appendChild(el);
+
+  // PC: mousedown → 드래그
+  el.addEventListener('mousedown',e=>{
+    if(e.target.classList.contains('dot')) return;
+    if(e.target.classList.contains('xb')) return;
+    if(!inp.readOnly) return;
+    e.preventDefault();
+    selectNode(id);
+    const {x:mx,y:my}=cvXY(e);
+    dragState={id,ox:mx-nodes[id].x,oy:my-nodes[id].y,moved:false};
+  });
+
+  // PC: click → 편집 진입 (선택된 상태에서)
+  el.addEventListener('click',e=>{
+    if(e.target.classList.contains('dot')) return;
+    if(e.target.classList.contains('xb')) return;
+    if(dragState?.moved) return;
+    if(selId===id && inp.readOnly) openEdit(id);
+    else selectNode(id);
+  });
+
+  // 터치: touchstart → 드래그 준비
+  el.addEventListener('touchstart',e=>{
+    if(e.target.classList.contains('dot')) return;
+    if(e.target.classList.contains('xb')) return;
+    if(!inp.readOnly) return;
+    e.preventDefault();
+    selectNode(id);
+    const {x:tx,y:ty}=cvXY(e);
+    dragState={id,ox:tx-nodes[id].x,oy:ty-nodes[id].y,moved:false};
+  },{passive:false});
+
+  nodes[id]={el,inp,x,y,color};
+  setTimeout(()=>autoW(inp),0);
+  return id;
+}
+
+function openEdit(id){
+  if(!nodes[id]) return;
+  const n=nodes[id];
+  n.inp.readOnly=false;
+  n.inp.classList.add('editable');
+  n.inp.focus();
+  n.inp.select();
+  activeInp=n.inp;
+}
+
+function selectNode(id){
+  if(selId&&nodes[selId]) nodes[selId].el.classList.remove('sel');
+  selId=id;
+  if(id&&nodes[id]){
+    nodes[id].el.classList.add('sel');
+    const c=nodes[id].color;
+    document.querySelectorAll('.sw').forEach(s=>s.classList.toggle('on',s.dataset.c===c));
+    panelName.textContent=nodes[id].inp.value||'(빈 노드)';
+    nodePanel.classList.add('show');
+  } else {
+    nodePanel.classList.remove('show');
+  }
+}
+
+function removeNode(id){
+  nodes[id]?.el.remove(); delete nodes[id];
+  edges=edges.filter(e=>{
+    if(e.from===id||e.to===id){e.path?.remove();e.lbEl?.remove();return false;}
+    return true;
+  });
+  if(selId===id){selId=null; nodePanel.classList.remove('show');}
+}
+
+// ── 선택 노드 패널 버튼 ───────────────────────────────────────
+document.getElementById('panelEdit').addEventListener('click',()=>{ if(selId) openEdit(selId); });
+document.getElementById('panelDel').addEventListener('click',()=>{ if(selId) removeNode(selId); });
+
+// ── 엣지 ─────────────────────────────────────────────────────
+function addEdge(fromId,toId,style,label){
+  const id='e'+(++ec);
+  const dash=style==='dashed';
+  const col=dash?'#D85A30':(PAL[nodes[fromId]?.color]?.st||'#534AB7');
+  const mk=dash?'mo':(PAL[nodes[fromId]?.color]?.mk||'mp');
+
+  const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('fill','none');
+  path.setAttribute('stroke',col);
+  path.setAttribute('stroke-width','2');
+  path.setAttribute('marker-end',`url(#${mk})`);
+  if(dash) path.setAttribute('stroke-dasharray','6 3');
+  EG.appendChild(path);
+
+  const lbDiv=document.createElement('div');
+  lbDiv.className='elb'+(dash?' dash':'');
+
+  const lbInp=document.createElement('input');
+  lbInp.type='text'; lbInp.placeholder='연결어'; lbInp.maxLength=30;
+  lbInp.value=label||'';
+  lbInp.addEventListener('mousedown',e=>e.stopPropagation());
+  lbInp.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+  lbInp.addEventListener('focus',()=>activeInp=lbInp);
+  lbInp.addEventListener('blur',()=>{ if(activeInp===lbInp) activeInp=null; });
+
+  // 연결선 삭제 버튼 (항상 표시 — 태블릿 친화)
+  const edel=document.createElement('button');
+  edel.className='edel'; edel.textContent='×'; edel.title='연결선 삭제';
+  edel.addEventListener('click',e=>{e.stopPropagation();removeEdge(id);});
+  edel.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();removeEdge(id);});
+
+  lbDiv.appendChild(lbInp);
+  lbDiv.appendChild(edel);
+  CV.appendChild(lbDiv);
+
+  const edge={id,from:fromId,to:toId,style,path,lbEl:lbDiv,lbInp};
+  edges.push(edge);
+  drawEdge(edge);
+  return edge;
+}
+
+function removeEdge(id){
+  const i=edges.findIndex(e=>e.id===id);
+  if(i<0) return;
+  edges[i].path?.remove(); edges[i].lbEl?.remove(); edges.splice(i,1);
+}
+
+function drawEdge(e){
+  const fn=nodes[e.from],tn=nodes[e.to];
+  if(!fn||!tn) return;
+  const fx=fn.x+nW(e.from)/2, fy=fn.y+nH(e.from)/2;
+  const tx=tn.x+nW(e.to)/2,   ty=tn.y+nH(e.to)/2;
+  const ang=Math.atan2(ty-fy,tx-fx);
+  const ca=Math.cos(ang), sa=Math.sin(ang);
+  const hw=nW(e.to)/2+10, hh=nH(e.to)/2+10;
+  const rr=hw*hh/Math.sqrt(hh*hh*ca*ca+hw*hw*sa*sa);
+  const ex=tx-ca*rr, ey=ty-sa*rr;
+  const mx=(fx+ex)/2, my=(fy+ey)/2;
+  const dist=Math.hypot(ex-fx,ey-fy)||1;
+  const bend=Math.min(dist*0.2,40);
+  const nx=-(ey-fy)/dist, ny=(ex-fx)/dist;
+  e.path.setAttribute('d',`M${fx} ${fy} Q${mx+nx*bend} ${my+ny*bend} ${ex} ${ey}`);
+  e.lbEl.style.left=(fx+ex)/2+'px';
+  e.lbEl.style.top=(fy+ey)/2+'px';
+}
+
+function redrawEdges(){edges.forEach(drawEdge);}
+
+// ── 전역 드래그 (마우스) ─────────────────────────────────────
+document.addEventListener('mousemove',e=>{
+  if(dragState){
+    const {x,y}=cvXY(e);
+    const nx=Math.max(0,x-dragState.ox), ny=Math.max(0,y-dragState.oy);
+    if(Math.abs(nx-nodes[dragState.id].x)>4||Math.abs(ny-nodes[dragState.id].y)>4) dragState.moved=true;
+    nodes[dragState.id].x=nx; nodes[dragState.id].y=ny;
+    nodes[dragState.id].el.style.left=nx+'px'; nodes[dragState.id].el.style.top=ny+'px';
+    redrawEdges();
+  }
+  if(connState){
+    const {x,y}=cvXY(e);
+    TP.setAttribute('d',`M${nCX(connState.fromId)} ${nCY(connState.fromId)} L${x} ${y}`);
+  }
+});
+
+document.addEventListener('mouseup',e=>{
+  if(dragState) dragState=null;
+  if(connState){
+    const tgt=e.target.closest('.node');
+    if(tgt&&tgt.id!==connState.fromId) addEdge(connState.fromId,tgt.id,curLine);
+    connState=null; TP.setAttribute('display','none'); TP.setAttribute('d','');
+  }
+});
+
+// ── 전역 드래그 (터치) ───────────────────────────────────────
+document.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(dragState){
+    const {x,y}=cvXY(e);
+    const nx=Math.max(0,x-dragState.ox), ny=Math.max(0,y-dragState.oy);
+    if(Math.abs(nx-nodes[dragState.id].x)>4||Math.abs(ny-nodes[dragState.id].y)>4) dragState.moved=true;
+    nodes[dragState.id].x=nx; nodes[dragState.id].y=ny;
+    nodes[dragState.id].el.style.left=nx+'px'; nodes[dragState.id].el.style.top=ny+'px';
+    redrawEdges();
+  }
+  if(connState){
+    const {x,y}=cvXY(e);
+    TP.setAttribute('d',`M${nCX(connState.fromId)} ${nCY(connState.fromId)} L${x} ${y}`);
+  }
+},{passive:false});
+
+document.addEventListener('touchend',e=>{
+  if(dragState) dragState=null;
+  if(connState){
+    const touch=e.changedTouches[0];
+    const tgt=document.elementFromPoint(touch.clientX,touch.clientY)?.closest('.node');
+    if(tgt&&tgt.id!==connState.fromId) addEdge(connState.fromId,tgt.id,curLine);
+    connState=null; TP.setAttribute('display','none'); TP.setAttribute('d','');
+  }
+});
+
+CV.addEventListener('click',e=>{
+  if(e.target===CV||e.target.id==='svg'||e.target.tagName==='g') selectNode(null);
+});
+
+// ── 툴바 ─────────────────────────────────────────────────────
+document.querySelectorAll('.sw').forEach(sw=>{
+  sw.addEventListener('click',()=>{
+    document.querySelectorAll('.sw').forEach(s=>s.classList.remove('on'));
+    sw.classList.add('on'); curCol=sw.dataset.c;
+    if(selId&&nodes[selId]){
+      const p=PAL[curCol], n=nodes[selId];
+      n.color=curCol;
+      n.el.style.background=p.bg; n.el.style.borderColor=p.st; n.inp.style.color=p.tx;
+      edges.forEach(e=>{
+        if(e.from===selId&&e.style!=='dashed'){
+          e.path.setAttribute('stroke',p.st);
+          e.path.setAttribute('marker-end',`url(#${p.mk})`);
+        }
+      });
+    }
+  });
+});
+
+document.getElementById('selLine').addEventListener('change',e=>curLine=e.target.value);
+
+document.getElementById('btnAdd').addEventListener('click',()=>{
+  const x=WR.scrollLeft+80+Math.random()*200;
+  const y=WR.scrollTop+80+Math.random()*100;
+  const id=addNode(Math.round(x),Math.round(y),'',curCol);
+  selectNode(id);
+  setTimeout(()=>openEdit(id),80);
+});
+
+document.getElementById('btnDel').addEventListener('click',()=>{
+  if(selId) removeNode(selId);
+  else alert('삭제할 노드를 먼저 선택하세요.');
+});
+
+document.getElementById('btnReset').addEventListener('click',()=>{
+  if(!confirm('모두 지울까요?')) return;
+  Object.keys(nodes).forEach(removeNode);
+  edges.forEach(e=>{e.path?.remove();e.lbEl?.remove();}); edges=[]; ec=0; selId=null;
+  nodePanel.classList.remove('show');
+});
+
+// ── 저장/불러오기 ─────────────────────────────────────────────
+document.getElementById('btnSave').addEventListener('click',()=>{
+  const data={
+    nodes:Object.values(nodes).map(n=>({id:n.el.id,x:n.x,y:n.y,color:n.color,text:n.inp.value})),
+    edges:edges.map(e=>({from:e.from,to:e.to,style:e.style,label:e.lbInp.value}))
+  };
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download='개념도.json'; a.click();
+});
+
+document.getElementById('btnLoad').addEventListener('click',()=>document.getElementById('fileIn').click());
+document.getElementById('fileIn').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      Object.keys(nodes).forEach(removeNode);
+      edges.forEach(e=>{e.path?.remove();e.lbEl?.remove();}); edges=[];
+      const map={};
+      data.nodes.forEach(n=>{const ni=addNode(n.x,n.y,n.text||'',n.color||'purple');map[n.id]=ni;});
+      setTimeout(()=>{
+        (data.edges||[]).forEach(e=>{
+          const f2=map[e.from],t2=map[e.to];
+          if(f2&&t2) addEdge(f2,t2,e.style||'solid',e.label||'');
+        });
+      },150);
+    }catch{alert('파일을 읽을 수 없습니다.');}
+  };
+  r.readAsText(f); e.target.value='';
+});
+
+// ── 샘플 ────────────────────────────────────────────────────
+addNode(100,80,'상위 개념','purple');
+addNode(380,80,'개념 B','purple');
+addNode(660,80,'H₂O (굽은형)','teal');
+</script>
+</body>
+</html>
